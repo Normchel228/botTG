@@ -1,28 +1,28 @@
 
 import { GoogleGenAI } from "@google/genai";
 
+/**
+ * Generates an absurd reason for blocking a service using Gemini.
+ */
 export async function generateBlockReason(appName: string): Promise<string> {
   try {
-    // Безопасно получаем ключ только в момент вызова, чтобы не уронить всё приложение при старте
-    const apiKey = typeof process !== 'undefined' && process.env?.API_KEY ? process.env.API_KEY : '';
+    // The API key must be obtained exclusively from the environment variable process.env.API_KEY.
+    // Create a new instance right before making an API call to ensure it uses the current key.
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     
-    if (!apiKey) {
-      console.warn("API Key is missing. Check your environment variables.");
-      return "Причина заблокирована по требованию секретного протокола (отсутствует API ключ).";
-    }
-
-    const ai = new GoogleGenAI({ apiKey });
+    // Use ai.models.generateContent to query GenAI with the model name and prompt.
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: `Напиши одну короткую смешную бюрократическую причину, почему сервис "${appName}" нужно заблокировать или замедлить в России. Стиль: сухой чиновничий язык с абсурдным уклоном. Не более 15 слов.`,
+      contents: `Напиши одну очень короткую (до 10 слов) смешную и абсурдную причину блокировки сервиса "${appName}". Используй сухой канцелярский язык.`,
       config: {
-        temperature: 1,
-        thinkingConfig: { thinkingBudget: 0 }
+        temperature: 0.9
       }
     });
-    return response.text || "Выявлено нарушение протоколов здравого смысла.";
+
+    // The GenerateContentResponse features a .text property, not a method.
+    return response.text || "Причина засекречена по приказу высшего руководства.";
   } catch (error) {
-    console.error("Gemini error:", error);
-    return "Обнаружены признаки деструктивного влияния на атмосферное давление.";
+    console.error("AI Error:", error);
+    return "Слишком много свободы слова в данном сегменте сети.";
   }
 }

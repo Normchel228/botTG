@@ -11,23 +11,23 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
-            --bg-color: var(--tg-theme-bg-color, #1a1c1e);
-            --text-color: var(--tg-theme-text-color, #f0f2f5);
+            --bg-color: #1a1c1e;
+            --text-color: #f0f2f5;
         }
         body {
-            background-color: #000; /* Черный фон для CRT эффекта */
-            color: var(--text-color);
+            background-color: #1a1c1e;
+            color: white;
             margin: 0;
             padding: 0;
             overflow: hidden;
             font-family: 'Courier New', Courier, monospace;
         }
-        /* Улучшенный эффект помех */
+        /* Слой помех (теперь он сзади или прозрачный) */
         .scanline {
             width: 100%;
             height: 2px;
-            z-index: 101;
-            background: rgba(255, 255, 255, 0.05);
+            z-index: 50;
+            background: rgba(255, 255, 255, 0.03);
             position: absolute;
             top: 0;
             animation: scanline 4s linear infinite;
@@ -41,16 +41,18 @@
             position: absolute;
             top: 0; left: 0; bottom: 0; right: 0;
             background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%),
-                        linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
+                        linear-gradient(90deg, rgba(255, 0, 0, 0.02), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.02));
             background-size: 100% 3px, 3px 100%;
             pointer-events: none;
-            z-index: 100;
+            z-index: 40;
         }
         #root {
+            position: relative;
+            z-index: 100; /* Контент всегда сверху */
             height: 100vh;
             width: 100vw;
-            position: relative;
-            z-index: 10;
+            display: flex;
+            flex-direction: column;
         }
         .stamp-enter {
             animation: stamp-animation 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
@@ -60,11 +62,17 @@
             100% { transform: scale(1) rotate(12deg); opacity: 0.9; }
         }
     </style>
+    <script>
+        // Предотвращаем падение при обращении к process.env
+        window.process = { env: { API_KEY: "" } };
+    </script>
 <script type="importmap">
 {
   "imports": {
-    "react/": "https://esm.sh/react@^19.2.3/",
     "react": "https://esm.sh/react@^19.2.3",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react-dom": "https://esm.sh/react-dom@^19.2.3",
+    "react-dom/client": "https://esm.sh/react-dom@^19.2.3/client",
     "@google/genai": "https://esm.sh/@google/genai@^1.34.0",
     "react-dom/": "https://esm.sh/react-dom@^19.2.3/"
   }
