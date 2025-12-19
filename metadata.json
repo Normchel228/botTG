@@ -1,0 +1,5 @@
+{
+  "name": "RKN Simulator: Bureaucrat Edition",
+  "description": "A meme-style Telegram Mini App where you play as a regulator, spinning the wheel of justice to ban or throttle apps and earn your 'salary'.",
+  "requestFramePermissions": []
+}
