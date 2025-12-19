@@ -4,7 +4,17 @@ export interface TargetApp {
   name: string;
   icon: string;
   description: string;
-  dangerLevel: number; // 1 to 5
+  dangerLevel: number;
+}
+
+export interface Upgrade {
+  id: string;
+  name: string;
+  description: string;
+  cost: number;
+  multiplier: number;
+  icon: string;
+  owned: boolean;
 }
 
 export interface PlayerStats {
@@ -12,6 +22,9 @@ export interface PlayerStats {
   totalBans: number;
   totalThrottles: number;
   rank: string;
+  clickPower: number;
+  multiplier: number;
+  upgrades: string[];
 }
 
 export interface LeaderboardEntry {
@@ -21,8 +34,8 @@ export interface LeaderboardEntry {
 }
 
 export enum GameView {
-  MAIN = 'MAIN',
+  OFFICE = 'OFFICE',
   ROULETTE = 'ROULETTE',
   LEADERBOARD = 'LEADERBOARD',
-  OFFICE = 'OFFICE'
+  SHOP = 'SHOP'
 }
