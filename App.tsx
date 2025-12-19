@@ -1,258 +1,250 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { GameView, TargetApp, PlayerStats, LeaderboardEntry, Upgrade } from './types';
-import { TARGET_APPS, RANKS, MOCK_LEADERBOARD, UPGRADES } from './constants';
-import { generateBlockReason } from './services/geminiService';
-import Roulette from './components/Roulette';
+import React, { useState, useEffect, useRef } from 'react';
+import { GoogleGenAI } from "@google/genai";
 
-const tg = (window as any).Telegram?.WebApp;
+// --- Types ---
+type OSState = 'BIOS' | 'DIALUP' | 'DESKTOP';
+
+interface AppState {
+  balance: number;
+  rank: string;
+  isTerminalOpen: boolean;
+  isConnecting: boolean;
+  isConnected: boolean;
+}
+
+// --- Constants ---
+const DIALUP_SOUND_URL = "https://www.soundboard.com/handler/DownLoadTrack.ashx?cliptitle=Dial+up+modem+sound&filename=mt/MTk5MTk3ODMxOTkxOTgz_p82Rst_2f8Dsc.mp3";
+
+const TARGETS = [
+  { name: 'YouTube', threat: 'High' },
+  { name: 'Discord', threat: 'Medium' },
+  { name: 'Telegram', threat: 'Extreme' },
+  { name: 'GitHub', threat: 'Low' },
+  { name: 'Wikipedia', threat: 'High' }
+];
 
 const App: React.FC = () => {
-  const [isBooting, setIsBooting] = useState(true);
-  const [view, setView] = useState<GameView>(GameView.OFFICE);
-  const [stats, setStats] = useState<PlayerStats>(() => {
-    try {
-      const saved = localStorage.getItem('rkn_v3_data');
-      return saved ? JSON.parse(saved) : {
-        balance: 0,
-        totalBans: 0,
-        totalThrottles: 0,
-        rank: RANKS[0].title,
-        clickPower: 10,
-        multiplier: 1,
-        upgrades: []
-      };
-    } catch {
-      return { balance: 0, totalBans: 0, totalThrottles: 0, rank: RANKS[0].title, clickPower: 10, multiplier: 1, upgrades: [] };
-    }
-  });
+  const [osState, setOsState] = useState<OSState>('BIOS');
+  const [loadingProgress, setLoadingProgress] = useState(0);
+  const [isDialing, setIsDialing] = useState(false);
+  const [dialStep, setDialStep] = useState('');
+  const [balance, setBalance] = useState(0);
+  const [isTerminalOpen, setIsTerminalOpen] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [terminalOutput, setTerminalOutput] = useState<string[]>(["BARRIER-2025 v1.0.4", "READY FOR INPUT..."]);
   
-  const [isSpinning, setIsSpinning] = useState(false);
-  const [selectedApp, setSelectedApp] = useState<TargetApp | null>(null);
-  const [aiReason, setAiReason] = useState<string>('');
-  const [loadingReason, setLoadingReason] = useState(false);
-  const [showStamp, setShowStamp] = useState<'BAN' | 'THROTTLE' | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
+  // BIOS Loading Effect
   useEffect(() => {
-    if (tg) {
-      tg.ready();
-      tg.expand();
-      tg.setHeaderColor('#1a1c1e');
+    if (osState === 'BIOS') {
+      const interval = setInterval(() => {
+        setLoadingProgress(prev => {
+          if (prev >= 100) {
+            clearInterval(interval);
+            setTimeout(() => setOsState('DIALUP'), 1000);
+            return 100;
+          }
+          return prev + Math.random() * 15;
+        });
+      }, 200);
+      return () => clearInterval(interval);
     }
-    const timer = setTimeout(() => setIsBooting(false), 1000);
-    return () => clearTimeout(timer);
-  }, []);
+  }, [osState]);
 
-  useEffect(() => {
-    localStorage.setItem('rkn_v3_data', JSON.stringify(stats));
-  }, [stats]);
+  const startDialing = () => {
+    setIsDialing(true);
+    setDialStep('Инициализация модема...');
+    
+    // Play the famous sound
+    audioRef.current = new Audio(DIALUP_SOUND_URL);
+    audioRef.current.play().catch(e => console.log("Audio play blocked", e));
 
-  // Added missing handleAction to handle app banning/throttling
-  const handleAction = (type: 'BAN' | 'THROTTLE') => {
-    if (!selectedApp) return;
-    
-    const reward = selectedApp.dangerLevel * 100 * stats.multiplier;
-    
-    setStats(prev => {
-      const newBal = prev.balance + reward;
-      const newRank = [...RANKS].reverse().find(r => newBal >= r.minBalance)?.title || RANKS[0].title;
-      return {
-        ...prev,
-        balance: newBal,
-        totalBans: type === 'BAN' ? prev.totalBans + 1 : prev.totalBans,
-        totalThrottles: type === 'THROTTLE' ? prev.totalThrottles + 1 : prev.totalThrottles,
-        rank: newRank
-      };
-    });
+    const steps = [
+      'Набор номера: 8-800-555-35-35...',
+      'Удаленный сервер ответил...',
+      'Проверка логина и пароля...',
+      'Установка связи (56 kbps)...',
+      'Вход в сеть министерства...'
+    ];
 
-    setShowStamp(type);
-    if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
-    
-    // Auto-clear stamp and reset state after a delay
-    setTimeout(() => {
-      setShowStamp(null);
-      setSelectedApp(null);
-      setAiReason('');
-    }, 1000);
+    let i = 0;
+    const interval = setInterval(() => {
+      if (i < steps.length) {
+        setDialStep(steps[i]);
+        i++;
+      } else {
+        clearInterval(interval);
+        setTimeout(() => setOsState('DESKTOP'), 1000);
+      }
+    }, 2500);
   };
 
-  const handlePaperClick = () => {
-    const gain = stats.clickPower * stats.multiplier;
-    setStats(prev => {
-      const newBal = prev.balance + gain;
-      const newRank = [...RANKS].reverse().find(r => newBal >= r.minBalance)?.title || RANKS[0].title;
-      return { ...prev, balance: newBal, rank: newRank };
-    });
-    if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
-  };
+  const handleBan = async (target: string) => {
+    if (isProcessing) return;
+    setIsProcessing(true);
+    setTerminalOutput(prev => [...prev, `> BAN REQUEST: ${target.toUpperCase()}`, "CONNECTING TO GEMINI CENTRAL..."]);
 
-  const buyUpgrade = (upgrade: Upgrade) => {
-    if (stats.balance >= upgrade.cost && !stats.upgrades.includes(upgrade.id)) {
-      setStats(prev => ({
-        ...prev,
-        balance: prev.balance - upgrade.cost,
-        upgrades: [...prev.upgrades, upgrade.id],
-        multiplier: prev.multiplier * upgrade.multiplier,
-        clickPower: upgrade.id === 'stapler' ? prev.clickPower + 40 : prev.clickPower
-      }));
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: `Напиши одну смешную, абсурдную бюрократическую причину блокировки сервиса "${target}" на русском языке. Максимум 10 слов.`
+      });
+
+      const reason = response.text || "Причина не указана (секретно).";
+      setTerminalOutput(prev => [...prev, `SUCCESS: ${reason}`, `REWARD: +₽1000`]);
+      setBalance(b => b + 1000);
+    } catch (e) {
+      setTerminalOutput(prev => [...prev, "ERROR: Connection timed out", "REASON: Too much freedom detected."]);
+    } finally {
+      setIsProcessing(false);
     }
   };
 
-  if (isBooting) {
+  // --- RENDERS ---
+
+  if (osState === 'BIOS') {
     return (
-      <div className="flex-1 bg-[#1a1c1e] text-green-500 flex flex-col items-center justify-center font-mono">
-        <p className="text-2xl font-black mb-4 animate-pulse">ВХОД В СИСТЕМУ...</p>
-        <div className="w-32 h-1 bg-green-900 overflow-hidden">
-          <div className="h-full bg-green-500 animate-[load_1s_infinite]"></div>
+      <div className="bg-black text-white h-full p-8 font-mono text-sm leading-tight uppercase">
+        <p>Award Modular BIOS v4.51PG, An Energy Star Ally</p>
+        <p>Copyright (C) 1984-1998, Award Software, Inc.</p>
+        <br />
+        <p>Pentium(R) II - MMX(TM) CPU at 233MHz</p>
+        <p>Memory Test: {Math.floor(loadingProgress * 640)}KB OK</p>
+        <br />
+        <p>Detecting Primary Master ... ST34321A</p>
+        <p>Detecting Primary Slave  ... None</p>
+        <br />
+        <p className="animate-pulse">Loading BARRIER.SYS...</p>
+        <div className="fixed bottom-10 left-8">
+          Press DEL to enter SETUP
         </div>
-        <style>{`@keyframes load { 0% { width: 0; } 100% { width: 100%; } }`}</style>
+      </div>
+    );
+  }
+
+  if (osState === 'DIALUP') {
+    return (
+      <div className="h-full flex items-center justify-center p-4">
+        <div className="win-outset bg-[#c0c0c0] w-full max-w-xs shadow-2xl">
+          <div className="win-title-bar">
+            <span>Удаленное соединение</span>
+            <button className="win-outset bg-[#c0c0c0] px-1 text-black font-bold h-4 flex items-center">×</button>
+          </div>
+          <div className="p-4 space-y-4">
+            <div className="flex gap-4 items-center">
+              <i className="fa-solid fa-phone-flip text-3xl text-gray-700"></i>
+              <div className="text-xs font-bold">Подключение к: <br/><span className="text-blue-900 underline">GOS-GATE-01</span></div>
+            </div>
+            
+            <div className="win-inset p-2 text-[10px] h-12 flex items-center justify-center text-center">
+              {isDialing ? (
+                <div className="space-y-2 w-full">
+                  <p className="animate-pulse">{dialStep}</p>
+                  <div className="w-full h-2 bg-gray-200 win-inset overflow-hidden">
+                    <div className="h-full bg-blue-800 animate-[progress_2s_infinite]"></div>
+                  </div>
+                </div>
+              ) : (
+                <p>Нажмите "Вызов" для начала сеанса</p>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button 
+                onClick={startDialing}
+                disabled={isDialing}
+                className="win-outset bg-[#c0c0c0] px-4 py-1 text-xs font-bold active:bg-[#a0a0a0] disabled:opacity-50"
+              >
+                Вызов
+              </button>
+              <button className="win-outset bg-[#c0c0c0] px-4 py-1 text-xs font-bold">Отмена</button>
+            </div>
+          </div>
+        </div>
+        <style>{`@keyframes progress { 0% { width: 0; } 100% { width: 100%; } }`}</style>
       </div>
     );
   }
 
   return (
-    <div className="flex-1 flex flex-col bg-slate-300 max-w-md mx-auto relative border-x-4 border-slate-500 shadow-inner overflow-hidden">
-      {/* Top Header */}
-      <div className="bg-slate-900 text-white p-3 flex justify-between items-center shrink-0 border-b-2 border-slate-700">
-        <div>
-          <p className="text-[8px] uppercase font-bold text-slate-500">Бюджет</p>
-          <p className="text-xl font-mono text-green-400">₽{stats.balance.toLocaleString()}</p>
-        </div>
-        <div className="text-right">
-          <p className="text-[8px] uppercase font-bold text-slate-500">Ранг</p>
-          <p className="text-[10px] font-black text-yellow-500 uppercase italic">{stats.rank}</p>
-        </div>
-      </div>
-
-      <div className="flex-1 relative p-4 bg-slate-200 overflow-y-auto">
-        {view === GameView.OFFICE && (
-          <div className="h-full flex flex-col">
-            {/* Monitor */}
-            <div 
-              className="w-full aspect-video bg-slate-800 rounded-sm border-4 border-slate-700 shadow-lg mb-6 flex flex-col items-center justify-center cursor-pointer active:scale-95 transition-transform"
-              onClick={() => setView(GameView.ROULETTE)}
-            >
-              <i className="fa-solid fa-satellite-dish text-4xl text-slate-600 mb-2"></i>
-              <p className="text-[10px] font-bold text-green-600 animate-pulse uppercase tracking-widest">ТЕРМИНАЛ: ГОТОВ</p>
-            </div>
-
-            {/* Desktop Items */}
-            <div className="flex-1 grid grid-cols-2 gap-4 items-end pb-4">
-              <div className="flex flex-col items-center group cursor-pointer" onClick={handlePaperClick}>
-                <div className="w-24 h-16 bg-white border-2 border-slate-400 shadow-md group-active:translate-y-1 transition-transform relative">
-                  <div className="absolute inset-x-2 top-2 h-0.5 bg-slate-200"></div>
-                  <div className="absolute inset-x-2 top-4 h-0.5 bg-slate-200"></div>
-                  <div className="absolute inset-x-2 top-6 h-0.5 bg-slate-100"></div>
-                </div>
-                <p className="text-[8px] font-bold mt-2 uppercase">Штамповать отчёты</p>
-              </div>
-
-              <div className="flex flex-col items-center cursor-pointer group" onClick={() => setView(GameView.SHOP)}>
-                <div className="w-16 h-16 bg-slate-700 rounded-full border-4 border-slate-800 shadow-lg flex items-center justify-center group-active:scale-90 transition-transform">
-                  <i className="fa-solid fa-toolbox text-2xl text-slate-400"></i>
-                </div>
-                <p className="text-[8px] font-bold mt-2 uppercase">Хоз. отдел</p>
-              </div>
-            </div>
-
-            <button onClick={() => setView(GameView.LEADERBOARD)} className="w-full py-2 bg-slate-800 text-white font-bold text-[9px] uppercase tracking-widest">
-              Доска Почёта
-            </button>
+    <div className="h-full flex flex-col">
+      {/* Desktop Area */}
+      <div className="flex-1 p-4 grid grid-cols-1 content-start gap-8">
+        {/* Desktop Icons */}
+        <div 
+          className="flex flex-col items-center w-16 group cursor-pointer"
+          onDoubleClick={() => setIsTerminalOpen(true)}
+          onClick={() => { if(window.innerWidth < 640) setIsTerminalOpen(true); }}
+        >
+          <div className="w-10 h-10 flex items-center justify-center group-active:opacity-70">
+            <i className="fa-solid fa-shield-halved text-3xl text-white drop-shadow-lg"></i>
           </div>
-        )}
+          <span className="text-[10px] text-white bg-black/30 px-1 mt-1 text-center font-bold">Barrier 2025</span>
+        </div>
 
-        {view === GameView.ROULETTE && (
-          <div className="h-full flex flex-col bg-white border-2 border-slate-800 p-4 shadow-xl">
-            <button onClick={() => setView(GameView.OFFICE)} className="mb-4 text-[9px] font-bold text-red-600 uppercase underline self-start">← Вернуться</button>
-            <Roulette 
-              isSpinning={isSpinning} 
-              onSelected={async (app) => {
-                setIsSpinning(false);
-                setSelectedApp(app);
-                setLoadingReason(true);
-                const r = await generateBlockReason(app.name);
-                setAiReason(r);
-                setLoadingReason(false);
-              }} 
-            />
+        <div className="flex flex-col items-center w-16 opacity-80">
+          <i className="fa-solid fa-trash-can text-3xl text-white drop-shadow-lg"></i>
+          <span className="text-[10px] text-white bg-black/30 px-1 mt-1 text-center font-bold">Корзина</span>
+        </div>
+
+        {/* Barrier App Window */}
+        {isTerminalOpen && (
+          <div className="absolute top-10 left-4 right-4 win-outset bg-[#c0c0c0] shadow-2xl z-50">
+            <div className="win-title-bar">
+              <div className="flex items-center gap-1">
+                <i className="fa-solid fa-shield-halved text-[10px]"></i>
+                <span>Система контроля №13</span>
+              </div>
+              <button onClick={() => setIsTerminalOpen(false)} className="win-outset bg-[#c0c0c0] px-1 text-black font-bold h-4 flex items-center">×</button>
+            </div>
             
-            {!isSpinning && !selectedApp && (
-              <button 
-                onClick={() => { setIsSpinning(true); setSelectedApp(null); }} 
-                className="mt-6 w-full py-4 bg-red-700 text-white font-black text-xl uppercase italic shadow-[0_5px_0_#450a0a]"
-              >
-                КРУТИТЬ
-              </button>
-            )}
-
-            {selectedApp && (
-              <div className="mt-6 border-2 border-slate-800 p-3 bg-slate-50 relative">
-                <div className="flex items-center mb-3">
-                  <i className={`${selectedApp.icon} text-3xl mr-3`}></i>
-                  <p className="font-black uppercase text-lg">{selectedApp.name}</p>
-                </div>
-                <p className="text-[10px] italic mb-4 bg-white p-2 border border-slate-200">
-                  {loadingReason ? "Ожидание шифровки..." : aiReason}
-                </p>
-                <div className="flex gap-2">
-                  <button onClick={() => { handleAction('BAN'); setView(GameView.OFFICE); }} className="flex-1 py-3 bg-red-700 text-white text-[10px] font-bold uppercase">Забанить</button>
-                </div>
+            <div className="p-2 space-y-2">
+              <div className="win-inset bg-black text-[#00ff00] p-2 font-mono text-[10px] h-40 overflow-y-auto">
+                {terminalOutput.map((line, idx) => <p key={idx}>{line}</p>)}
+                {isProcessing && <p className="animate-pulse">_</p>}
               </div>
-            )}
-          </div>
-        )}
 
-        {view === GameView.SHOP && (
-          <div className="h-full bg-slate-100 border-2 border-slate-800 p-4 overflow-y-auto">
-            <button onClick={() => setView(GameView.OFFICE)} className="mb-4 text-[9px] font-bold uppercase underline">← В кабинет</button>
-            <div className="space-y-2">
-              {UPGRADES.map(u => (
-                <div key={u.id} className={`p-2 border border-slate-300 bg-white flex items-center justify-between ${stats.upgrades.includes(u.id) ? 'opacity-50' : ''}`}>
-                  <div className="flex items-center">
-                    <i className={`${u.icon} mr-3 text-slate-600`}></i>
-                    <div>
-                      <p className="text-[9px] font-bold uppercase">{u.name}</p>
-                      <p className="text-[7px] text-slate-400">{u.description}</p>
-                    </div>
+              <div className="grid grid-cols-1 gap-1">
+                <p className="text-[9px] font-bold uppercase text-gray-700">Список нарушителей:</p>
+                {TARGETS.map(t => (
+                  <div key={t.name} className="flex items-center justify-between win-outset p-1 bg-white/50">
+                    <span className="text-[11px] font-bold">{t.name} <span className="text-[8px] text-red-600">[{t.threat}]</span></span>
+                    <button 
+                      onClick={() => handleBan(t.name)}
+                      disabled={isProcessing}
+                      className="win-outset bg-[#c0c0c0] text-[9px] px-2 py-0.5 font-bold hover:bg-red-200 transition-colors"
+                    >
+                      БЛОК
+                    </button>
                   </div>
-                  <button 
-                    disabled={stats.balance < u.cost || stats.upgrades.includes(u.id)}
-                    onClick={() => buyUpgrade(u)}
-                    className="px-2 py-1 bg-green-700 text-white text-[9px] font-bold uppercase rounded-sm"
-                  >
-                    {stats.upgrades.includes(u.id) ? 'ОК' : `₽${u.cost}`}
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {view === GameView.LEADERBOARD && (
-          <div className="h-full bg-white border-2 border-slate-800 p-4">
-            <button onClick={() => setView(GameView.OFFICE)} className="mb-4 text-[9px] font-bold uppercase underline">← Назад</button>
-            <div className="space-y-1">
-              {[...MOCK_LEADERBOARD, { name: 'ВЫ (Инспектор)', salary: stats.balance, isPlayer: true }].sort((a, b) => b.salary - a.salary).map((e, i) => (
-                <div key={i} className={`flex justify-between p-2 text-[10px] border-b ${e.isPlayer ? 'bg-yellow-50 font-bold' : ''}`}>
-                  <span>{i+1}. {e.name}</span>
-                  <span className="font-mono">₽{e.salary.toLocaleString()}</span>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           </div>
         )}
       </div>
 
-      {showStamp && (
-        <div className="absolute inset-0 flex items-center justify-center z-[200] pointer-events-none">
-          <div className="stamp-enter border-8 border-red-700 text-red-700 p-4 font-black text-4xl transform rotate-12 bg-white/80">
-            ОДОБРЕНО
-          </div>
+      {/* Taskbar */}
+      <div className="h-8 win-outset bg-[#c0c0c0] flex items-center p-1 gap-1 z-[1000]">
+        <button className="win-outset flex items-center gap-1 px-2 h-full bg-[#c0c0c0] font-bold text-[11px] active:bg-[#808080]">
+          <i className="fa-solid fa-windows text-blue-800"></i>
+          Пуск
+        </button>
+        <div className="win-inset flex-1 h-full bg-[#808080]/10 flex items-center px-2">
+          {isTerminalOpen && (
+            <div className="win-outset bg-[#c0c0c0] h-full flex items-center px-2 text-[10px] font-bold max-w-[120px] truncate">
+              <i className="fa-solid fa-shield-halved mr-1"></i> Barrier 2025
+            </div>
+          )}
         </div>
-      )}
-
-      <div className="bg-slate-900 text-[6px] text-center text-slate-600 py-1 uppercase tracking-widest shrink-0">
-        Система контроля №13 // 2025
+        <div className="win-inset h-full flex items-center px-2 text-[10px] font-bold gap-2">
+          <i className="fa-solid fa-volume-high opacity-50"></i>
+          <span className="text-green-800">₽{balance}</span>
+          <span>{new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+        </div>
       </div>
     </div>
   );
